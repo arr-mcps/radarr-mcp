@@ -1,5 +1,6 @@
 # radarr-mcp
 
+Part of the [arr-mcps](https://github.com/SavageCore/arr-mcps) collection.
 MCP server exposing [Radarr](https://radarr.video)'s v3 REST API
 ([OpenAPI 3.0.4](https://radarr.video/docs/api/)) as tools, so an LLM can read
 and manage a Radarr instance: movies, movie files, the download queue, history,
