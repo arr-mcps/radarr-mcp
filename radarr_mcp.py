@@ -1,25 +1,33 @@
 """MCP server exposing Radarr's v3 REST API (OpenAPI 3.0.4) as tools.
 
-One tool per endpoint, generated from the vendored spec at
-tests/data/radarr_openapi.json (develop HEAD c6fef4309de3ffdd5e0e9607ad30beb12d791333).
-Full coverage: every JSON-producing endpoint under /api/v3 plus GET /ping
-(binary/text endpoints - media covers and raw log files - are excluded).
+Full coverage of every JSON-producing endpoint under /api/v3 plus GET /ping
+(binary/text endpoints - media covers and raw log files - are excluded), but
+exposed as ~15 resource-scoped *portmanteau* tools instead of one tool per
+endpoint. Each portmanteau tool (e.g. radarr_queue, radarr_media_library)
+takes an `operation` enum plus an `arguments` dict; see AGENTS.md for the
+rationale (a 200+-tool server blows the MCP context budget on session start).
+
+The vendored spec at tests/data/radarr_openapi.json (develop HEAD
+c6fef4309de3ffdd5e0e9607ad30beb12d791333) still generates one async function
+per endpoint into `_TOOL_REGISTRY` - keep it in sync with the spec (see
+AGENTS.md). Those functions are no longer registered as individual MCP
+tools; `_GROUPS` below buckets them by resource, and `_register_group` wraps
+each bucket in a single dispatching tool that calls the right function by
+name. Nothing about the endpoint functions themselves changes - grouping is
+purely a registration-time concern.
 
 Auth is the X-Api-Key header, generated in Radarr > Settings > General >
-Security. GET endpoints are marked readOnlyHint=True; POST/PUT writes are
-readOnlyHint=False; DELETE endpoints additionally set destructiveHint=True so
-clients can warn before calling them. Bodies are passed as opaque dicts/lists.
-
-Tools are built at import time from the `_TOOL_REGISTRY` table below: one
-async closure per entry, registered through FastMCP's Tool.from_function. The
-registry is generated from the spec; keep it in sync with the vendored file
-(see AGENTS.md). build_client points at the origin with no path suffix so
+Security. A group tool is marked readOnlyHint=True only when every operation
+in it is a GET; mixed groups carry no hints (writes still get a `WRITE:` /
+`DESTRUCTIVE:` note in their operation's doc line). Bodies are passed as
+opaque dicts/lists. build_client points at the origin with no path suffix so
 httpx joins the fully-qualified paths (including /ping) correctly.
 """
 
+import inspect
 import os
 import sys
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 import httpx
@@ -76,6 +84,268 @@ async def _req(
 def _omit(params: dict[str, Any]) -> dict[str, Any]:
     """Drop keys whose values are empty/None so the API's defaults apply."""
     return {k: v for k, v in params.items() if v not in ("", None)}
+
+
+# Resource groups for portmanteau registration. Every _TOOL_REGISTRY name
+# must appear in exactly one group - see test_all_registry_names_grouped.
+_GROUPS: dict[str, tuple[str, ...]] = {
+    "radarr_profiles_formats": (
+        'radarr_bulk_delete_customformat',
+        'radarr_bulk_update_customformat',
+        'radarr_create_autotagging',
+        'radarr_create_customfilter',
+        'radarr_create_customformat',
+        'radarr_create_delayprofile',
+        'radarr_create_qualityprofile',
+        'radarr_create_releaseprofile',
+        'radarr_delete_autotagging',
+        'radarr_delete_customfilter',
+        'radarr_delete_customformat',
+        'radarr_delete_delayprofile',
+        'radarr_delete_qualityprofile',
+        'radarr_delete_releaseprofile',
+        'radarr_get_autotagging',
+        'radarr_get_autotagging_schema',
+        'radarr_get_customfilter',
+        'radarr_get_customformat',
+        'radarr_get_customformat_schema',
+        'radarr_get_delayprofile',
+        'radarr_get_language',
+        'radarr_get_qualitydefinition',
+        'radarr_get_qualitydefinition_limits',
+        'radarr_get_qualityprofile',
+        'radarr_get_qualityprofile_schema',
+        'radarr_get_releaseprofile',
+        'radarr_list_autotagging',
+        'radarr_list_customfilter',
+        'radarr_list_customformat',
+        'radarr_list_delayprofile',
+        'radarr_list_language',
+        'radarr_list_qualitydefinition',
+        'radarr_list_qualityprofile',
+        'radarr_list_releaseprofile',
+        'radarr_reorder_delayprofile',
+        'radarr_update_autotagging',
+        'radarr_update_customfilter',
+        'radarr_update_customformat',
+        'radarr_update_delayprofile',
+        'radarr_update_quality_definitions',
+        'radarr_update_qualitydefinition',
+        'radarr_update_qualityprofile',
+        'radarr_update_releaseprofile',
+    ),
+    "radarr_media_library": (
+        'radarr_add_movie',
+        'radarr_bulk_delete_movie',
+        'radarr_bulk_delete_moviefile',
+        'radarr_bulk_edit_moviefiles',
+        'radarr_bulk_update_movie',
+        'radarr_bulk_update_moviefile',
+        'radarr_commit_manual_import',
+        'radarr_delete_movie',
+        'radarr_delete_moviefile',
+        'radarr_get_alttitle',
+        'radarr_get_collection',
+        'radarr_get_credit',
+        'radarr_get_movie',
+        'radarr_get_movie_folder',
+        'radarr_get_moviefile',
+        'radarr_get_parse',
+        'radarr_get_rename',
+        'radarr_import_movie',
+        'radarr_list_alttitle',
+        'radarr_list_collection',
+        'radarr_list_credit',
+        'radarr_list_extrafile',
+        'radarr_list_manualimport',
+        'radarr_list_movie',
+        'radarr_list_moviefile',
+        'radarr_lookup_movie',
+        'radarr_lookup_movie_by_imdb_id',
+        'radarr_lookup_movie_by_tmdb_id',
+        'radarr_update_collection',
+        'radarr_update_collections',
+        'radarr_update_movie',
+        'radarr_update_moviefile',
+    ),
+    "radarr_config": (
+        'radarr_get_config_downloadclient',
+        'radarr_get_config_downloadclient_by_id',
+        'radarr_get_config_host',
+        'radarr_get_config_host_by_id',
+        'radarr_get_config_importlist',
+        'radarr_get_config_importlist_by_id',
+        'radarr_get_config_indexer',
+        'radarr_get_config_indexer_by_id',
+        'radarr_get_config_mediamanagement',
+        'radarr_get_config_mediamanagement_by_id',
+        'radarr_get_config_metadata',
+        'radarr_get_config_metadata_by_id',
+        'radarr_get_config_naming',
+        'radarr_get_config_naming_by_id',
+        'radarr_get_config_ui',
+        'radarr_get_config_ui_by_id',
+        'radarr_get_localization_language',
+        'radarr_list_config_naming_examples',
+        'radarr_list_localization',
+        'radarr_list_update',
+        'radarr_update_config_downloadclient',
+        'radarr_update_config_host',
+        'radarr_update_config_importlist',
+        'radarr_update_config_indexer',
+        'radarr_update_config_mediamanagement',
+        'radarr_update_config_metadata',
+        'radarr_update_config_naming',
+        'radarr_update_config_ui',
+    ),
+    "radarr_import_lists": (
+        'radarr_action_importlist',
+        'radarr_bulk_create_exclusions',
+        'radarr_bulk_delete_exclusions',
+        'radarr_bulk_delete_importlist',
+        'radarr_bulk_update_importlist',
+        'radarr_create_exclusions',
+        'radarr_create_importlist',
+        'radarr_delete_exclusions',
+        'radarr_delete_importlist',
+        'radarr_get_exclusions',
+        'radarr_get_importlist',
+        'radarr_get_importlist_schema',
+        'radarr_import_list_movie',
+        'radarr_list_exclusions',
+        'radarr_list_exclusions_paged',
+        'radarr_list_importlist',
+        'radarr_list_importlist_movie',
+        'radarr_test_all_importlist',
+        'radarr_test_importlist',
+        'radarr_update_exclusions',
+        'radarr_update_importlist',
+    ),
+    "radarr_system_commands": (
+        'radarr_delete_command',
+        'radarr_delete_system_backup',
+        'radarr_get_command',
+        'radarr_get_health',
+        'radarr_get_system_routes',
+        'radarr_get_system_routes_duplicate',
+        'radarr_get_system_status',
+        'radarr_get_system_task',
+        'radarr_get_system_task_by_id',
+        'radarr_list_command',
+        'radarr_list_log',
+        'radarr_list_log_file',
+        'radarr_list_log_file_update',
+        'radarr_list_system_backup',
+        'radarr_ping',
+        'radarr_restart_radarr',
+        'radarr_restore_backup',
+        'radarr_restore_backup_upload',
+        'radarr_run_command',
+        'radarr_shutdown_radarr',
+    ),
+    "radarr_notifications_metadata": (
+        'radarr_action_metadata',
+        'radarr_action_notification',
+        'radarr_create_metadata',
+        'radarr_create_notification',
+        'radarr_delete_metadata',
+        'radarr_delete_notification',
+        'radarr_get_metadata',
+        'radarr_get_metadata_schema',
+        'radarr_get_notification',
+        'radarr_get_notification_schema',
+        'radarr_list_metadata',
+        'radarr_list_notification',
+        'radarr_test_all_metadata',
+        'radarr_test_all_notification',
+        'radarr_test_metadata',
+        'radarr_test_notification',
+        'radarr_update_metadata',
+        'radarr_update_notification',
+    ),
+    "radarr_download_clients": (
+        'radarr_action_downloadclient',
+        'radarr_bulk_delete_downloadclient',
+        'radarr_bulk_update_downloadclient',
+        'radarr_create_downloadclient',
+        'radarr_create_remotepathmapping',
+        'radarr_delete_downloadclient',
+        'radarr_delete_remotepathmapping',
+        'radarr_get_downloadclient',
+        'radarr_get_downloadclient_schema',
+        'radarr_get_remotepathmapping',
+        'radarr_list_downloadclient',
+        'radarr_list_remotepathmapping',
+        'radarr_test_all_downloadclient',
+        'radarr_test_downloadclient',
+        'radarr_update_downloadclient',
+        'radarr_update_remotepathmapping',
+    ),
+    "radarr_indexers": (
+        'radarr_action_indexer',
+        'radarr_bulk_delete_indexer',
+        'radarr_bulk_update_indexer',
+        'radarr_create_indexer',
+        'radarr_delete_indexer',
+        'radarr_get_indexer',
+        'radarr_get_indexer_schema',
+        'radarr_list_indexer',
+        'radarr_test_all_indexer',
+        'radarr_test_indexer',
+        'radarr_update_indexer',
+    ),
+    "radarr_history_blocklist": (
+        'radarr_bulk_delete_blocklist',
+        'radarr_delete_blocklist',
+        'radarr_list_blocklist',
+        'radarr_list_blocklist_movie',
+        'radarr_list_history',
+        'radarr_list_history_movie',
+        'radarr_list_history_since',
+        'radarr_mark_history_item_failed',
+    ),
+    "radarr_storage": (
+        'radarr_create_rootfolder',
+        'radarr_delete_rootfolder',
+        'radarr_get_diskspace',
+        'radarr_get_rootfolder',
+        'radarr_list_filesystem',
+        'radarr_list_filesystem_mediafiles',
+        'radarr_list_filesystem_type',
+        'radarr_list_rootfolder',
+    ),
+    "radarr_queue": (
+        'radarr_bulk_delete_queue',
+        'radarr_delete_queue',
+        'radarr_get_queue_details',
+        'radarr_get_queue_status',
+        'radarr_grab_queue_bulk',
+        'radarr_grab_queue_item',
+        'radarr_list_queue',
+    ),
+    "radarr_tags": (
+        'radarr_create_tag',
+        'radarr_delete_tag',
+        'radarr_get_tag',
+        'radarr_get_tag_detail',
+        'radarr_list_tag',
+        'radarr_list_tag_detail',
+        'radarr_update_tag',
+    ),
+    "radarr_release_search": (
+        'radarr_get_indexerflag',
+        'radarr_list_release',
+        'radarr_push_release',
+        'radarr_search_releases',
+    ),
+    "radarr_wanted": (
+        'radarr_list_wanted_cutoff',
+        'radarr_list_wanted_missing',
+    ),
+    "radarr_calendar": (
+        'radarr_list_calendar',
+    ),
+}
 
 
 _TOOL_REGISTRY: list[dict[str, Any]] = [{'name': 'radarr_list_alttitle',
@@ -1790,19 +2060,50 @@ def _tool_source(spec: dict[str, Any]) -> str:
     )
 
 
+def _op_line(name: str, fn: Any) -> str:
+    """One line of a group tool's description: signature + one-line doc."""
+    sig = ", ".join(
+        p.name if p.default is inspect.Parameter.empty else f"{p.name}={p.default!r}"
+        for p in inspect.signature(fn).parameters.values()
+    )
+    return f"- {name}({sig}) — {' '.join((fn.__doc__ or '').split())}"
+
+
+def _register_group(group: str, names: tuple[str, ...], ns: dict[str, Any], method_of: dict[str, str]) -> None:
+    """Register one dispatching tool that fans out to every endpoint function
+    named in `names`. The endpoint functions themselves are untouched -
+    they're just looked up by name instead of each becoming its own tool."""
+    fns = {n: ns[n] for n in names}
+
+    async def dispatch(operation: str, arguments: JSONObj | None = None) -> JSONVal:
+        fn = fns.get(operation)
+        if fn is None:
+            raise ToolError(f"Unknown operation {operation!r} for {group}. Valid: {', '.join(fns)}")
+        return await fn(**(arguments or {}))
+
+    dispatch.__annotations__["operation"] = Literal[names]
+    ann = READONLY if {method_of[n] for n in names} == {"GET"} else None
+    mcp.add_tool(
+        Tool.from_function(
+            dispatch,
+            name=group,
+            description=(
+                f"{group.replace('_', ' ')} operations on Radarr. Pass `operation` and an "
+                f"`arguments` dict matching that operation's parameters.\n\n"
+                + "\n".join(_op_line(n, f) for n, f in fns.items())
+            ),
+            annotations=ann,
+        )
+    )
+
+
 def register_tools() -> None:
     src = "\n".join(_tool_source(spec) for spec in _TOOL_REGISTRY)
     ns: dict[str, Any] = {}
     exec(src, globals(), ns)
-    for spec in _TOOL_REGISTRY:
-        fn = ns[spec["name"]]
-        if spec["method"] == "GET":
-            ann = READONLY
-        elif spec["method"] == "DELETE":
-            ann = DESTRUCTIVE
-        else:
-            ann = WRITE
-        mcp.add_tool(Tool.from_function(fn, name=spec["name"], description=spec["doc"], annotations=ann))
+    method_of = {spec["name"]: spec["method"] for spec in _TOOL_REGISTRY}
+    for group, names in _GROUPS.items():
+        _register_group(group, names, ns, method_of)
 
 
 register_tools()
