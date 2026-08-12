@@ -35,7 +35,12 @@ Always use the `make bump-*` targets to bump the version (`uv version --bump pat
   git push origin main
   git push origin v<version>
   ```
-- This server is not yet deployed to the Proxmox host or the christopfarr project copy. When it is, follow the pattern in the other `-mcp` servers: push tags, sync the project copy, then `ssh root@192.168.50.3 -- 'cd /root/radarr-mcp && git fetch origin && git reset --hard origin/main && uv tool install --force .'`.
+- Deploy to the Proxmox host (root SSH key): pull the repo then reinstall the uv tool:
+  ```
+  ssh root@192.168.50.3 -- 'cd /root/radarr-mcp && git fetch origin && git reset --hard origin/main'
+  ssh root@192.168.50.3 -- 'cd /root/radarr-mcp && uv tool install --force .'
+  ```
+  The host runs it via `uv tool install` → `/root/.local/bin/radarr-mcp` (not from the repo). Locally it is registered in the christopfarr project opencode via `uv run --directory /home/savagecore/Documents/christopfarr/mcp/radarr-mcp`.
 
 ## Initial state
 Version starts at `0.0.0` in the initial commit. No tag on the scaffold commit; releases begin at the first `make bump-*`.
