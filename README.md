@@ -1,6 +1,6 @@
 # radarr-mcp
 
-Part of the [arr-mcps](https://github.com/SavageCore/arr-mcps) collection.
+Part of the [arr-mcps](https://github.com/arr-mcps/arr-mcps) collection.
 MCP server exposing [Radarr](https://radarr.video)'s v3 REST API
 ([OpenAPI 3.0.4](https://radarr.video/docs/api/)) as tools, so an LLM can read
 and manage a Radarr instance: movies, movie files, the download queue, history,
@@ -16,7 +16,7 @@ Generate one in Radarr **Settings > General > Security**. Auth is the
 
 ## Install
 
-Download a wheel from the [latest release](https://github.com/SavageCore/radarr-mcp/releases/latest)
+Download a wheel from the [latest release](https://github.com/arr-mcps/radarr-mcp/releases/latest)
 and install it as a `uv` tool (no repo checkout needed):
 
 ```bash
@@ -106,7 +106,7 @@ make help  # list all commands
 | `make clean` | Remove build artifacts |
 
 The release workflow (`.github/workflows/release.yml`) builds and publishes to
-[Releases](https://github.com/SavageCore/radarr-mcp/releases) whenever a `v*`
+[Releases](https://github.com/arr-mcps/radarr-mcp/releases) whenever a `v*`
 tag is pushed - so the usual flow is `make bump-patch`, commit, then tag and
 push.
 
