@@ -4,13 +4,13 @@ version = "0.2.0"
 description = "MCP server for Radarr's v3 API"
 license = "MIT"
 requires-python = ">=3.11"
-dependencies = ["fastmcp>=2.0.0"]
+dependencies = ["fastmcp>=4.1.4"]
 
 [project.scripts]
 radarr-mcp = "radarr_mcp:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0.0", "pytest-asyncio>=0.24.0"]
+dev = ["pytest>=9.2.0", "pytest-asyncio>=1.4.1"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
